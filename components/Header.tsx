@@ -12,7 +12,7 @@ export const Header: React.FC<HeaderProps> = ({ onSettingsClick }) => {
         <div className="flex items-center gap-3">
             <BrainCircuitIcon className="w-9 h-9 text-cyan-400" />
             <h1 className="text-xl md:text-2xl font-bold text-slate-100 tracking-wider">
-              CHUYỂN ĐỔI VẠN NĂNG <span className="font-normal text-cyan-400 opacity-80">&amp; PHÂN TÍCH AI</span>
+              TAM THIÊN THẾ GIỚI <span className="font-normal text-cyan-400 opacity-80">- MOD TOOL</span>
             </h1>
         </div>
         <button 

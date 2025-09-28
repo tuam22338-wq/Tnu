@@ -51,7 +51,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, isConverti
 
   return (
     <div className="w-full max-w-2xl text-center flex flex-col items-center">
-      <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">Chuyển đổi Tệp & Phân tích AI</h2>
+      <h2 className="text-3xl md:text-4xl font-bold text-slate-100 mb-4">TAM THIÊN THẾ GIỚI - MOD TOOL</h2>
       <p className="text-slate-400 mb-8 max-w-lg">Tải lên tệp để chuyển đổi sang văn bản thuần túy. Sau đó, bạn có thể tải xuống hoặc để AI tạo đề cương chi tiết.</p>
       
       <div 

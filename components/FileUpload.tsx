@@ -6,9 +6,10 @@ interface FileUploadProps {
   onFileChange: (file: File | null) => void;
   isConverting: boolean;
   error: string | null;
+  progress: number | null;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, isConverting, error }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, isConverting, error, progress }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -77,6 +78,18 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, isConverti
             )}
           </p>
           <p className="text-sm text-slate-500">Hỗ trợ: .txt, .pdf, .docx, .md</p>
+          
+          {isConverting && progress !== null && (
+            <div className="w-64 mt-4">
+              <div className="w-full bg-slate-700 rounded-full h-2.5">
+                <div 
+                  className="bg-cyan-500 h-2.5 rounded-full transition-all duration-150 ease-linear" 
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-center text-cyan-400 text-sm mt-1">{progress}%</p>
+            </div>
+          )}
         </div>
         <input 
           id="file-upload" 

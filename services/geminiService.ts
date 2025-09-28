@@ -14,9 +14,19 @@ function chunkText(text: string, chunkSize: number = CHUNK_SIZE): string[] {
     return chunks;
 }
 
+const getSummarizerPrompt = (chunk: string): string => `
+Bạn là một trợ lý chuyên gia có nhiệm vụ tóm tắt các phần của một cuốn tiểu thuyết lớn. Đối với đoạn văn bản được cung cấp, hãy cung cấp một bản tóm tắt chi tiết bao gồm các điểm cốt truyện chính, giới thiệu và phát triển nhân vật, và các sự kiện quan trọng. Đừng thêm bất kỳ lời nói chuyện phiếm nào. Chỉ cần cung cấp bản tóm tắt. Bản tóm tắt này sẽ được một AI khác sử dụng để tạo ra một đề cương cuối cùng, toàn diện.
+
+Đây là đoạn văn bản:
+---
+${chunk}
+---
+`;
 
 const getOutlineInstructions = (): string => `
 Bạn là một chuyên gia phân tích văn học. Nhiệm vụ của bạn là phân tích văn bản tiểu thuyết đã được cung cấp và tạo ra một đề cương toàn diện, có cấu trúc. Đề cương phải được định dạng bằng Markdown.
+
+Dựa trên các bản tóm tắt được cung cấp từ toàn bộ tiểu thuyết, hãy tạo ra đề cương.
 
 Đề cương phải bao gồm các phần sau, bắt đầu mỗi phần chính xác như được viết dưới đây (ví dụ: "1. **Tổng Quan Cốt Truyện:**"):
 
@@ -31,7 +41,7 @@ Bạn là một chuyên gia phân tích văn học. Nhiệm vụ của bạn là
     *   **Kết Cục:** Phần kết của câu chuyện.
 5.  **Phân Tích Chi Tiết Từng Chương (hoặc Phần):** Phân tích chi tiết các sự kiện quan trọng, các điểm cốt truyện và sự phát triển của nhân vật trong mỗi chương hoặc phần quan trọng của tiểu thuyết. Sử dụng tiêu đề cho mỗi chương/phần.
 
-Bây giờ, hãy tạo đề cương dựa trên TOÀN BỘ văn bản đã được cung cấp trong các phần trước.
+Bây giờ, hãy tạo đề cương dựa trên TOÀN BỘ văn bản đã được tóm tắt.
 `;
 
 export const generateOutlineChatStream = async (
@@ -46,22 +56,27 @@ export const generateOutlineChatStream = async (
 
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const chat: Chat = ai.chats.create({ model });
-
     const chunks = chunkText(novelText);
-    
+    let contextForFinalPrompt: string;
+
     if (chunks.length > 1) {
-        // Send all but the last chunk
-        for (let i = 0; i < chunks.length - 1; i++) {
-            await chat.sendMessage({ message: `Đây là phần ${i + 1}/${chunks.length} của văn bản:\n\n${chunks[i]}` });
+        onStream("Văn bản quá lớn, bắt đầu tóm tắt các phần nhỏ...\n\n");
+        const summaries: string[] = [];
+        for (let i = 0; i < chunks.length; i++) {
+            const prompt = getSummarizerPrompt(chunks[i]);
+            const response = await ai.models.generateContent({ model, contents: prompt });
+            summaries.push(response.text);
+            onStream(`Đã tóm tắt xong phần ${i + 1}/${chunks.length}.\n`);
         }
+
+        onStream("\nTổng hợp các bản tóm tắt và tạo đề cương cuối cùng...\n\n---\n\n");
+        contextForFinalPrompt = `Dưới đây là các bản tóm tắt chi tiết của một cuốn tiểu thuyết lớn, được chia thành các phần:\n\n${summaries.join('\n\n---\n\n')}`;
+    } else {
+        contextForFinalPrompt = novelText;
     }
     
-    // Send the last chunk along with the final prompt and stream the response.
-    const lastChunk = chunks[chunks.length - 1];
-    const finalPrompt = chunks.length > 1
-        ? `Đây là phần cuối cùng ${chunks.length}/${chunks.length} của văn bản:\n\n${lastChunk}\n\n---\n\n${getOutlineInstructions()}`
-        : `${lastChunk}\n\n---\n\n${getOutlineInstructions()}`;
+    const chat: Chat = ai.chats.create({ model });
+    const finalPrompt = `${contextForFinalPrompt}\n\n---\n\n${getOutlineInstructions()}`;
 
     const response = await chat.sendMessageStream({ message: finalPrompt });
 
@@ -73,12 +88,15 @@ export const generateOutlineChatStream = async (
     if (error instanceof Error && error.message.includes('API key not valid')) {
         throw new Error("API Key không hợp lệ. Vui lòng kiểm tra lại trong phần Cài Đặt.");
     }
+    if (error.toString().includes('INTERNAL')) {
+         throw new Error("Đã xảy ra lỗi nội bộ từ phía API. Điều này có thể do văn bản quá lớn hoặc phức tạp. Vui lòng thử lại với một tệp nhỏ hơn hoặc thử lại sau.");
+    }
     throw new Error("Quá trình phân tích gặp lỗi. Vui lòng thử lại. Nếu sự cố vẫn tiếp diễn, hãy kiểm tra API Key và kết nối mạng của bạn.");
   }
 };
 
 const getCharacterAnalysisInstructions = (): string => `
-Bạn là một nhà phê bình văn học chuyên sâu. Nhiệm vụ của bạn là đọc kỹ tiểu thuyết được cung cấp qua các phần và thực hiện một phân tích nhân vật chi tiết.
+Bạn là một nhà phê bình văn học chuyên sâu. Nhiệm vụ của bạn là đọc kỹ các bản tóm tắt của tiểu thuyết được cung cấp và thực hiện một phân tích nhân vật chi tiết.
 
 Chỉ tập trung vào 3-5 nhân vật quan trọng nhất.
 
@@ -90,7 +108,7 @@ Chỉ tập trung vào 3-5 nhân vật quan trọng nhất.
 - Các mối quan hệ quan trọng với các nhân vật khác.
 - Một vài câu thoại tiêu biểu thể hiện rõ nhất tính cách của họ.
 
-Vui lòng trả về kết quả dưới dạng một mảng JSON tuân thủ schema được cung cấp, dựa trên TOÀN BỘ văn bản.
+Vui lòng trả về kết quả dưới dạng một mảng JSON tuân thủ schema được cung cấp, dựa trên TOÀN BỘ văn bản đã được tóm tắt.
 `;
 
 const characterAnalysisSchema = {
@@ -143,23 +161,25 @@ export const generateCharacterAnalysisChat = async (
     }
     try {
         const ai = new GoogleGenAI({ apiKey });
-        const chat: Chat = ai.chats.create({ model });
-
         const chunks = chunkText(novelText);
+        let contextForFinalPrompt: string;
 
         if (chunks.length > 1) {
-            for (let i = 0; i < chunks.length - 1; i++) {
-                await chat.sendMessage({ message: `Đây là phần ${i + 1}/${chunks.length} của văn bản:\n\n${chunks[i]}` });
-            }
+            const summaryPromises = chunks.map(chunk => {
+                const prompt = getSummarizerPrompt(chunk);
+                return ai.models.generateContent({ model, contents: prompt }).then(response => response.text);
+            });
+            const summaries = await Promise.all(summaryPromises);
+            contextForFinalPrompt = `Dưới đây là các bản tóm tắt chi tiết của một cuốn tiểu thuyết lớn, được chia thành các phần:\n\n${summaries.join('\n\n---\n\n')}`;
+        } else {
+            contextForFinalPrompt = novelText;
         }
         
-        const lastChunk = chunks[chunks.length - 1];
-        const finalPrompt = chunks.length > 1
-            ? `Đây là phần cuối cùng ${chunks.length}/${chunks.length} của văn bản:\n\n${lastChunk}\n\n---\n\n${getCharacterAnalysisInstructions()}`
-            : `${lastChunk}\n\n---\n\n${getCharacterAnalysisInstructions()}`;
+        const finalPrompt = `${contextForFinalPrompt}\n\n---\n\n${getCharacterAnalysisInstructions()}`;
 
-        const response = await chat.sendMessage({
-            message: finalPrompt,
+        const response = await ai.models.generateContent({
+            model,
+            contents: finalPrompt,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: characterAnalysisSchema,
@@ -177,6 +197,9 @@ export const generateCharacterAnalysisChat = async (
         }
         if (error instanceof SyntaxError) {
              throw new Error("AI đã trả về một định dạng không hợp lệ. Vui lòng thử lại.");
+        }
+        if (error.toString().includes('INTERNAL')) {
+             throw new Error("Đã xảy ra lỗi nội bộ từ phía API khi phân tích nhân vật. Điều này có thể do văn bản quá lớn hoặc phức tạp. Vui lòng thử lại với một tệp nhỏ hơn.");
         }
         throw new Error("Quá trình phân tích nhân vật gặp lỗi. Vui lòng thử lại. Nếu sự cố vẫn tiếp diễn, hãy kiểm tra API Key và model được chọn.");
     }

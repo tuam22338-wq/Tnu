@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const fileContentRef = useRef<string>('');
   const [outline, setOutline] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [conversionProgress, setConversionProgress] = useState<number | null>(null);
   
   const [characterAnalysisStatus, setCharacterAnalysisStatus] = useState<Status>(Status.IDLE);
   const [characterAnalysisData, setCharacterAnalysisData] = useState<CharacterAnalysisData | null>(null);
@@ -71,15 +72,31 @@ const App: React.FC = () => {
     }
   };
   
-  const convertPdfToTxt = async (pdfFile: File): Promise<string> => {
+  const convertPdfToTxt = async (pdfFile: File, onProgress: (progress: number) => void): Promise<string> => {
+    onProgress(0);
     const arrayBuffer = await pdfFile.arrayBuffer();
+    onProgress(5); // File loaded into memory
     const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-    let fullText = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n\n';
-    }
+    onProgress(10); // PDF document parsed
+    
+    const numPages = pdf.numPages;
+    const pageTexts = new Array(numPages);
+    let pagesProcessed = 0;
+
+    const pagePromises = Array.from({ length: numPages }, (_, i) => {
+        return pdf.getPage(i + 1).then((page: any) => {
+            return page.getTextContent().then((textContent: any) => {
+                pageTexts[i] = textContent.items.map((item: any) => item.str).join(' ');
+                pagesProcessed++;
+                const progress = 10 + Math.round((pagesProcessed / numPages) * 90);
+                onProgress(progress);
+            });
+        });
+    });
+
+    await Promise.all(pagePromises);
+    const fullText = pageTexts.join('\n\n');
+
     if (!fullText.trim()) throw new Error('Không tìm thấy nội dung văn bản trong tệp PDF.');
     return fullText;
   };
@@ -97,13 +114,14 @@ const App: React.FC = () => {
     setFile(selectedFile);
     setAppState(AppState.CONVERTING);
     setError(null);
+    setConversionProgress(null);
 
     try {
       let textContent = '';
       const fileName = selectedFile.name.toLowerCase();
 
       if (fileName.endsWith('.pdf')) {
-        textContent = await convertPdfToTxt(selectedFile);
+        textContent = await convertPdfToTxt(selectedFile, setConversionProgress);
       } else if (fileName.endsWith('.docx')) {
         textContent = await convertDocxToTxt(selectedFile);
       } else if (fileName.endsWith('.txt') || fileName.endsWith('.md')) {
@@ -118,6 +136,7 @@ const App: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể xử lý tệp.');
       setAppState(AppState.IDLE);
+      setConversionProgress(null);
     }
   };
 
@@ -198,6 +217,7 @@ const App: React.FC = () => {
     setCharacterAnalysisData(null);
     setCharacterAnalysisStatus(Status.IDLE);
     setCharacterAnalysisError(null);
+    setConversionProgress(null);
   };
 
   const renderMainContent = () => {
@@ -209,6 +229,7 @@ const App: React.FC = () => {
                       onFileChange={handleFileChange}
                       isConverting={appState === AppState.CONVERTING}
                       error={error}
+                      progress={conversionProgress}
                   />
               );
           case AppState.PREVIEW:

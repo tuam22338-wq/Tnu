@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Status, Model, AnalysisMode, CharacterAnalysisData } from '../types';
 import { Loader } from './Loader';
 import { CharacterAnalysis } from './CharacterAnalysis';
@@ -63,13 +63,41 @@ export const OutlineDisplay: React.FC<OutlineDisplayProps> = (props) => {
   const { status, outline, fileName, modelName, onReset, error } = props;
   const [isCopied, setIsCopied] = useState(false);
   const [activeMode, setActiveMode] = useState<AnalysisMode>(AnalysisMode.OUTLINE);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const downloadButtonRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (downloadButtonRef.current && !downloadButtonRef.current.contains(event.target as Node)) {
+            setShowDownloadOptions(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleDownload = () => {
     const blob = new Blob([outline], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${fileName.replace('.txt', '')}-de-cuong.md`;
+    const baseName = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+    link.download = `${baseName}-de-cuong.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadTxt = () => {
+    const blob = new Blob([outline], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const baseName = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+    link.download = `${baseName}-de-cuong.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -97,10 +125,40 @@ export const OutlineDisplay: React.FC<OutlineDisplayProps> = (props) => {
                 <TabButton mode={AnalysisMode.CHARACTER_ANALYSIS} Icon={UsersFocusIcon} label="Nhân Vật" />
             </div>
             <div className="flex items-center justify-end gap-3">
-                <button onClick={handleDownload} disabled={!outline || activeMode !== AnalysisMode.OUTLINE} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 rounded-md hover:bg-slate-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <DownloadIcon className="w-4 h-4" />
-                    Tải .md
-                </button>
+                <div className="relative" ref={downloadButtonRef}>
+                    <button 
+                        onClick={() => setShowDownloadOptions(prev => !prev)} 
+                        disabled={!outline || activeMode !== AnalysisMode.OUTLINE} 
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 rounded-md hover:bg-slate-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <DownloadIcon className="w-4 h-4" />
+                        Tải xuống
+                        <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${showDownloadOptions ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showDownloadOptions && (
+                        <div className="absolute right-0 mt-2 w-40 bg-slate-800 rounded-md shadow-lg z-20 border border-slate-700 animate-fade-in" style={{ animationDuration: '150ms' }}>
+                            <ul className="py-1">
+                                <li>
+                                    <button 
+                                        onClick={() => { handleDownload(); setShowDownloadOptions(false); }} 
+                                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    >
+                                      Đề cương (.md)
+                                    </button>
+                                </li>
+                                <li>
+                                    <button 
+                                        onClick={() => { handleDownloadTxt(); setShowDownloadOptions(false); }} 
+                                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    >
+                                      Đề cương (.txt)
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    )}
+                </div>
+
                 <button onClick={handleCopy} disabled={!outline || activeMode !== AnalysisMode.OUTLINE} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 rounded-md hover:bg-slate-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     <ClipboardIcon className="w-4 h-4" />
                     {isCopied ? 'Đã sao chép!' : 'Sao chép'}
